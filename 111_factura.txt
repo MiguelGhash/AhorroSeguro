@@ -1,0 +1,7 @@
+Señor Juan:
+Dentro de los primeros 5 días del mes DECEMBER debe realizar el pago de las siguientes cuotas:
+
+CódigoCrédito	Valor	PagosPendientes	Total
+1	400000.0	7	436140.06881741266
+
+El total a pagar de sus créditos es: $ 436140.06881741266 pesos.
