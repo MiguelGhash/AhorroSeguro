@@ -10,7 +10,7 @@ public class GeneralServices {
     private Stack RejectedCredits = new Stack();
     private BinaryTree RejectedTree = new BinaryTree();
     
-
+    // Métodos numeral 1: Registrar cliente
     public String CustomerSingUp(Customer Customer) {
         CustomerList.AddLast(Customer);
         return "Cliente registrado en el sistema";
@@ -20,12 +20,9 @@ public class GeneralServices {
         return new Customer(Id, Type, Name, Address, Tel, Contract, Salary);
     }
 
+    // Métodos numeral 2: Registrar solicitud de crédito
     public CreditRequest CreditRequest(String Code, String Type, String Owner, LocalDate RequestDate, Double Value, int Fee) {
         return new CreditRequest(Code, Type, Owner, RequestDate, Value, Fee);
-    }
-
-    public List CustomerListLocal() {
-        return CustomerList;
     }
 
     public String EnqueueRequest(CreditRequest CreditRequest) {
@@ -33,6 +30,7 @@ public class GeneralServices {
         return "Solicitud de crédito agregada";
     }
 
+    // Métodos numeral 3: Aprobar o negar una solicitud de crédito
     public String ApproveOrRejectRequest(CreditRequest CreditRequest, double CustomerSalary) {
         double AnnualRate = GetEffectiveAnnualRate(CreditRequest.getType());
         double MonthlyRate = Math.pow(1 + AnnualRate, 1.0 / 12) - 1;
@@ -66,187 +64,159 @@ public class GeneralServices {
         return Amount * (MonthlyRate * Math.pow(1 + MonthlyRate, Months)) / (Math.pow(1 + MonthlyRate, Months) - 1);
     }
 
-private void RegisterApprovedRequest(CreditRequest CreditRequest, double MonthlyInstallment, double MonthlyRate) {
-    Queue MonthlyPayments = new Queue();
-    LocalDate StartDate = CreditRequest.getRequestDate();
-    double RemainingCapital = CreditRequest.getValue();
+    private void RegisterApprovedRequest(CreditRequest CreditRequest, double MonthlyInstallment, double MonthlyRate) {
+        Queue MonthlyPayments = new Queue();
+        LocalDate StartDate = CreditRequest.getRequestDate();
+        double RemainingCapital = CreditRequest.getValue();
 
-    for (int i = 1; i <= CreditRequest.getFee(); i++) {
-        LocalDate PaymentDate = StartDate.plusMonths(i);
+        for (int i = 1; i <= CreditRequest.getFee(); i++) {
+            LocalDate PaymentDate = StartDate.plusMonths(i);
+            
+            double Interest = RemainingCapital * MonthlyRate;
+            double Capital = MonthlyInstallment - Interest;
+            RemainingCapital -= Capital;
+            
+            Cuotas Installment = new Cuotas(i, MonthlyInstallment, PaymentDate, "Pendiente", Interest, RemainingCapital);
+            MonthlyPayments.EnQueue(Installment);
+        }
         
-        double Interest = RemainingCapital * MonthlyRate;
-        double Capital = MonthlyInstallment - Interest;
-        RemainingCapital -= Capital;
-        
-        Cuotas Installment = new Cuotas(i, MonthlyInstallment, PaymentDate, "Pendiente", Interest, RemainingCapital);
-        MonthlyPayments.EnQueue(Installment);
+        CreditRequest.setMonthly(MonthlyPayments);
+        ApprovedCredits.AddLast(CreditRequest);
     }
-    
-    CreditRequest.setMonthly(MonthlyPayments);
-    ApprovedCredits.AddLast(CreditRequest);
-}
-  public String AprobarORechazarSolicitud(String clienteId) 
-  {
-      Customer cliente = (Customer) CustomerList.SearchById(clienteId);
-      if (cliente != null) 
-      {
-          CreditRequest solicitud = (CreditRequest) RequestQueue.DeQueue();
-          if (solicitud != null) 
-          {
-              String resultado = ApproveOrRejectRequest(solicitud, cliente.getSalary());
-              if (resultado.contains("aprobada"))
-              {
-                  GenerarFactura(cliente);
-                  return resultado + "\nFactura generada para la solicitud aprobada.";
-              }
 
-              return resultado;  // Si fue rechazada
-          } else 
-          {
-              return "No hay solicitudes pendientes.";
-          }
-      } else 
-      {
-        return "Cliente no encontrado.";
-      }
-  }
-
-    private void RegisterRejectedRequest(CreditRequest CreditRequest) 
-    {
+    private void RegisterRejectedRequest(CreditRequest CreditRequest) {
         RejectedCredits.Push(CreditRequest);
     }
-    public List GetApprovedCredits()
-    {
-        return ApprovedCredits;
+
+    public String AprobarORechazarSolicitud(String clienteId) {
+        Customer cliente = (Customer) CustomerList.SearchById(clienteId);
+        if (cliente != null) {
+            CreditRequest solicitud = (CreditRequest) RequestQueue.DeQueue();
+            if (solicitud != null) {
+                String resultado = ApproveOrRejectRequest(solicitud, cliente.getSalary());
+                if (resultado.contains("aprobada")) {
+                    GenerarFactura(cliente);
+                    return resultado + "\nFactura generada para la solicitud aprobada.";
+                }
+                return resultado;
+            } else {
+                return "No hay solicitudes pendientes.";
+            }
+        } else {
+            return "Cliente no encontrado.";
+        }
     }
 
-    public Stack GetRejectedCredits() 
+    // Métodos numeral 4: Pagar
+    public String RealizarPago(String CodigoCredito, double MontoPago) 
     {
-        return RejectedCredits;
-    }
-    public Queue RequestQueue()
-    {
-        return RequestQueue;
-    }
+        CreditRequest Credito = (CreditRequest) GetApprovedCredits().SearchByCode(CodigoCredito);
     
-public String PrintStack(Stack Stack)
-{   
-    Stack Aux = new Stack();
-    String text = "";
-    while (!Stack.IsEmpty())
-    {
-        CreditRequest CreditRequest = (CreditRequest) Stack.Pop(); 
-        text = text + CreditRequest.toString() + "\n";
-        Aux.Push(CreditRequest);
-    }
-    while (!Aux.IsEmpty())
-        Stack.Push(Aux.Pop());
     
-    return text;
-}
-
-public String PrintRejected()
-{
-    return PrintStack(RejectedCredits);
-}
-
-public boolean RejectedEmpty()
-{
-    return RejectedCredits.IsEmpty();
-}
-
-public String CancelCredit(String creditCode) {
-    CreditRequest CreditRequest = (CreditRequest) GetApprovedCredits().SearchByCode(creditCode);
-    if (CreditRequest != null) {
-        double RemainingBalance = CalculateRemainingBalance(CreditRequest);
-        double DiscountedAmount = RemainingBalance * 0.9; // 10% de descuento
-        String Message = "Crédito con código " + creditCode + " cancelado.\n";
-        Message += "Valor a pagar: " + DiscountedAmount;
-        UpdateCreditStatus(CreditRequest);
-        return Message;
-    } else {
-        return "No se encontró un crédito con el código " + creditCode;
-    }
-}
-public String RealizarPago(String CodigoCredito, double MontoPago) {
-    CreditRequest Credito = (CreditRequest) GetApprovedCredits().SearchByCode(CodigoCredito);
-    
-    if (Credito == null) {
+        if (Credito == null)
+        {
         return "No se encontró un crédito con el código especificado.";
-    }
-    
-    Queue CuotasOriginales = Credito.getMonthly();
-    Queue CuotasActualizadas = new Queue();
-    boolean PagoRealizado = false;
-    double Excedente = MontoPago;
-    String Mensaje = "";
+        }
+        Queue CuotasOriginales = Credito.getMonthly();
+        Queue CuotasActualizadas = new Queue();
+        boolean PagoRealizado = false;
+        double Excedente = MontoPago;
+        String Mensaje = "";
     
     // Procesar cada cuota
-    while (!CuotasOriginales.IsEmpty()) {
-        Cuotas cuota = (Cuotas) CuotasOriginales.DeQueue();
-        
-        // Si la cuota está pendiente y aún hay monto por pagar
-        if (cuota.getStatus().equals("Pendiente") && Excedente > 0 && !PagoRealizado) {
-            double valorCuota = cuota.getValue();
-            
-            if (Excedente >= valorCuota) {
+    
+       while (!CuotasOriginales.IsEmpty())
+       {
+           Cuotas cuota = (Cuotas) CuotasOriginales.DeQueue();
+        // Si la cuota está pendiente y aún hay monto por pagar 
+           if (cuota.getStatus().equals("Pendiente") && Excedente > 0 && !PagoRealizado) 
+           {
+               double valorCuota = cuota.getValue(); 
+               if (Excedente >= valorCuota) 
+               {
                 // Pago completo de la cuota
                 cuota.setStatus("Pagada");
                 Excedente -= valorCuota;
                 Mensaje += String.format("Cuota %d pagada completamente.\n" +"Fecha de pago: %s\n" + "Valor cuota: $%.2f\n" + "Intereses: $%.2f\n" 
                         +  "Capital amortizado: $%.2f\n",cuota.getCode(), cuota.getPayDay(), cuota.getValue(),cuota.getIntereses(),cuota.getCapital());
-            } else {
-                // Si el pago es menor que la cuota
-                Mensaje += String.format("Pago parcial para la cuota %d\n" +"Valor de la cuota: $%.2f\n" +"Monto pagado: $%.2f\n" +"Valor pendiente: $%.2f\n",
-                    cuota.getCode(),valorCuota,Excedente,(valorCuota - Excedente) );
-                Excedente = 0;
-            }
-            PagoRealizado = true;
-        }
-        
-        CuotasActualizadas.EnQueue(cuota);
-    }
+               } else 
+               {
+                
+                   // Si el pago es menor que la cuota
+                   Mensaje += String.format("Pago parcial para la cuota %d\n" +"Valor de la cuota: $%.2f\n" +"Monto pagado: $%.2f\n" +"Valor pendiente: $%.2f\n",
+                   cuota.getCode(),valorCuota,Excedente,(valorCuota - Excedente) );
+                   Excedente = 0;
+               }
+               PagoRealizado = true;
+           }
+           CuotasActualizadas.EnQueue(cuota);
     
-    // Actualizar las cuotas del crédito
-    Credito.setMonthly(CuotasActualizadas);
+       }
+       // Actualizar las cuotas del crédito 
+       Credito.setMonthly(CuotasActualizadas);
     
-    if (Excedente > 0) {
-        Mensaje += String.format(
-            "Excedente de $%.2f será aplicado a la siguiente cuota.\n",
-            Excedente
-        );
-    }
     
-    // Retornar el resultado
-    if (PagoRealizado) {
+       if (Excedente > 0) 
+       {
+           Mensaje += String.format("Excedente de $%.2f será aplicado a la siguiente cuota.\n", Excedente);
+       }
+    
+    
+// Retornar el resultado
+      if (PagoRealizado) 
+      {
         return "Pago procesado exitosamente.\n" + Mensaje;
-    } else {
+      } else 
+      {
         return "No se encontraron cuotas pendientes para pagar.";
-    }
+      }
 }
-private double CalculateRemainingBalance(CreditRequest CreditRequest) {
-    double RemainingBalance = 0.0;
-    Queue Cuotas = CreditRequest.getMonthly();
-    while (!Cuotas.IsEmpty()) {
-        Cuotas Cuota = (Cuotas) Cuotas.DeQueue();
-        if (Cuota.getStatus().equals("Pendiente")) {
-            RemainingBalance += Cuota.getValue();
+
+    // Métodos numeral 5: Cancelar crédito
+    public String CancelCredit(String creditCode) 
+    {
+    
+        CreditRequest CreditRequest = (CreditRequest) GetApprovedCredits().SearchByCode(creditCode);
+        if (CreditRequest != null) 
+        {
+            double RemainingBalance = CalculateRemainingBalance(CreditRequest);
+            double DiscountedAmount = RemainingBalance * 0.9; // 10% de descuento
+            String Message = "Crédito con código " + creditCode + " cancelado.\n";
+            Message += "Valor a pagar: " + DiscountedAmount;     
+            UpdateCreditStatus(CreditRequest);
+            return Message;
+        } else 
+        {
+            return "No se encontró un crédito con el código " + creditCode;
+        }
+}
+    private double CalculateRemainingBalance(CreditRequest CreditRequest)
+    {
+        double RemainingBalance = 0.0;
+        Queue Cuotas = CreditRequest.getMonthly();
+        while (!Cuotas.IsEmpty()) 
+        {
+            Cuotas Cuota = (Cuotas) Cuotas.DeQueue();
+            if (Cuota.getStatus().equals("Pendiente")) 
+            {
+                RemainingBalance += Cuota.getValue();
+            }
+        }
+        return RemainingBalance;
+    }
+
+    private void UpdateCreditStatus(CreditRequest CreditRequest) 
+    {
+        Queue Cuotas = CreditRequest.getMonthly();
+        while (!Cuotas.IsEmpty()) 
+        {
+            Cuotas Cuota = (Cuotas) Cuotas.DeQueue();
+            Cuota.setStatus("Pagada");
         }
     }
-    return RemainingBalance;
-}
 
-private void UpdateCreditStatus(CreditRequest CreditRequest) {
-    Queue Cuotas = CreditRequest.getMonthly();
-    while (!Cuotas.IsEmpty()) {
-        Cuotas installment = (Cuotas) Cuotas.DeQueue();
-        installment.setStatus("Pagada");
-    }
-}
-
-//
-    // Método para revaluar las solicitudes rechazadas
-    public String RevalidateRejectedRequests() 
+    // Métodos numeral 6: Revaluar la solicitud
+   public String RevalidateRejectedRequests() 
     {
         if (RejectedCredits.IsEmpty()) {
             return "No hay solicitudes rechazadas para revaluar.";
@@ -259,7 +229,6 @@ private void UpdateCreditStatus(CreditRequest CreditRequest) {
         }
         // Obtener solicitudes con un solo hijo
         List ApprovedRequests = RejectedTree.GetSingleChildRequests();
-        
         if (ApprovedRequests.IsEmpty()) 
         {
             return "No hay solicitudes que cumplan con los criterios de aprobación.";
@@ -294,14 +263,16 @@ private void UpdateCreditStatus(CreditRequest CreditRequest) {
         return Result;
     }
 
-    // Método auxiliar para convertir el contenido del árbol a String
     public String PrintRejectedTree() {
         if (RejectedTree.IsTreeEmpty()) {
             return "El árbol está vacío";
         }
         return RejectedTree.InOrder();
     }
-    public void GenerarFactura(Customer Cliente) {
+
+    // Métodos numeral 7: Enviar factura
+    public void GenerarFactura(Customer Cliente) 
+    {
         Archivo Archivo = new Archivo();
         List CreditosAprobados = GetApprovedCredits();
         Node CreditAux = CreditosAprobados.GetFirst(); // Recorremos los créditos aprobados
@@ -309,22 +280,27 @@ private void UpdateCreditStatus(CreditRequest CreditRequest) {
         Factura += "Dentro de los primeros 5 días del mes " + LocalDate.now().plusMonths(1).getMonth() + " debe realizar el pago de las siguientes cuotas:\n\n";
         Factura += "CódigoCrédito\tValor\tPagosPendientes\tTotal\n";
         double TotalDeuda = 0.0;
-        while (CreditAux != null) {
+        while (CreditAux != null) 
+        {
             CreditRequest Credito = (CreditRequest) CreditAux.getData();
-            if (Credito.getOwner().equals(Cliente.getId())) {
+            if (Credito.getOwner().equals(Cliente.getId())) 
+            {
                 Queue CuotasPendientes = Credito.getMonthly();
                 int PagosPendientes = 0;
                 double TotalCredito = 0.0;
                 Queue CuotasAux = new Queue();
-                while (!CuotasPendientes.IsEmpty()) {
+                while (!CuotasPendientes.IsEmpty())
+                {
                     Cuotas cuota = (Cuotas) CuotasPendientes.DeQueue();
                     CuotasAux.EnQueue(cuota); 
-                    if (cuota.getStatus().equals("Pendiente")) {
+                    if (cuota.getStatus().equals("Pendiente")) 
+                    {
                         PagosPendientes++;
                         TotalCredito += cuota.getValue();
                     }
                 }
-                while (!CuotasAux.IsEmpty()) {
+                while (!CuotasAux.IsEmpty()) 
+                {
                     CuotasPendientes.EnQueue(CuotasAux.DeQueue());
                 }
 
@@ -338,138 +314,180 @@ private void UpdateCreditStatus(CreditRequest CreditRequest) {
         Factura += "\nEl total a pagar de sus créditos es: $ " + TotalDeuda + " pesos.";
         Archivo.EscribirFactura(Cliente.getId(), Factura);
     }
-//Numeral 8 
-    
+
     public double CalcularTotalCreditosAprobados(String ClienteId) 
     {
-    double TotalCreditos = 0.0;
-    Node CreditAux = ApprovedCredits.GetFirst(); // Recorremos la lista de créditos aprobados
-    
-    // Recorrer los créditos aprobados
-    while (CreditAux  != null) 
-    {
-        CreditRequest credito = (CreditRequest) CreditAux .getData();
-        
-        // Verificar si el crédito pertenece al cliente actual
-        if (credito.getOwner().equals(ClienteId))
+        double TotalCreditos = 0.0;
+        Node CreditAux = ApprovedCredits.GetFirst(); // Recorremos la lista de créditos aprobados
+        // Recorrer los créditos aprobados
+        while (CreditAux  != null) 
         {
-            TotalCreditos += credito.getValue();
+            CreditRequest credito = (CreditRequest) CreditAux .getData();
+            // Verificar si el crédito pertenece al cliente actual
+            if (credito.getOwner().equals(ClienteId))
+            {
+                TotalCreditos += credito.getValue();
+            }     
+            CreditAux = CreditAux.getLink();
         }
-        
-        CreditAux = CreditAux.getLink();
+        return TotalCreditos;
     }
     
-    return TotalCreditos;
-}
-//Numeral 9 
-    
-    public String EliminarSolicitudCredito(String ClienteId, String CodigoCredito) {
-    Queue AuxQueue = new Queue();
-    boolean Encontrado = false;
-
-    // Recorremos la cola de solicitudes
-    while (!RequestQueue.IsEmpty()) 
-    {
-        CreditRequest Solicitud = (CreditRequest) RequestQueue.DeQueue();
-        
-        // Si coincide con el cliente y el código del crédito, no la volvemos a encolar
-        if (Solicitud.getOwner().equals(ClienteId) && Solicitud.getCode().equals(CodigoCredito)) 
+    //Métodos numeral 9: Mostrar los créditos de una persona, dada su identificación 
+        public double CalcularSaldoPendiente(String ClienteId, String CodigoCredito) 
         {
-            Encontrado = true;
-        } else 
-        {
-            AuxQueue.EnQueue(Solicitud); // Guardamos las solicitudes no eliminadas en la cola temporal
-        }
-    }
+            double SaldoPendiente = 0.0;
+            Node CreditAux = ApprovedCredits.GetFirst(); // Recorremos los créditos aprobados
+            // Buscar el crédito con el código y cliente correspondientes
+            while (CreditAux  != null) 
+            {   
+                CreditRequest Credito = (CreditRequest) CreditAux.getData();
+                if (Credito.getOwner().equals(ClienteId) && Credito.getCode().equals(CodigoCredito)) 
+                {
+                    Queue cuotasPendientes = Credito.getMonthly();
+                    // Revisamos todas las cuotas pendientes         
+                    while (!cuotasPendientes.IsEmpty()) 
+                    {
+                        Cuotas Cuota = (Cuotas) cuotasPendientes.DeQueue();
+                        if (Cuota.getStatus().equals("Pendiente")) 
+                        {
+                            SaldoPendiente += Cuota.getValue();
+                        }
+                    }
 
-    // Restauramos la cola original
-    while (!AuxQueue.IsEmpty())
-    {
-        RequestQueue.EnQueue(AuxQueue.DeQueue());
-    }
-    if (Encontrado)
-    {
-    return "Solicitud eliminada con éxito.";
-    } else 
-    {
-    return "No se encontró la solicitud para eliminar.";
-    }
-}
-public double CalcularSaldoPendiente(String ClienteId, String CodigoCredito) {
-    double SaldoPendiente = 0.0;
-    Node CreditAux = ApprovedCredits.GetFirst(); // Recorremos los créditos aprobados
-    
-    // Buscar el crédito con el código y cliente correspondientes
-    while (CreditAux  != null) {
-        CreditRequest Credito = (CreditRequest) CreditAux.getData();
-        
-        if (Credito.getOwner().equals(ClienteId) && Credito.getCode().equals(CodigoCredito)) {
-            Queue cuotasPendientes = Credito.getMonthly();
-
-            // Revisamos todas las cuotas pendientes
-            while (!cuotasPendientes.IsEmpty()) {
-                Cuotas Cuota = (Cuotas) cuotasPendientes.DeQueue();
-                if (Cuota.getStatus().equals("Pendiente")) {
-                    SaldoPendiente += Cuota.getValue();
+                    break; // Si ya encontramos el crédito, salimos del ciclo
                 }
+        
+                CreditAux  = CreditAux.getLink();
             }
+            return SaldoPendiente;
 
-            break; // Si ya encontramos el crédito, salimos del ciclo
         }
-        
-        CreditAux  = CreditAux.getLink();
-    }
-    
-    return SaldoPendiente;
-}
-
-    public String VerHistorialCreditosAprobados(String ClienteId) {
-    String Historial = "";
-    Node CreditAux = ApprovedCredits.GetFirst(); // Recorremos los créditos aprobados
-    
-    // Buscar los créditos correspondientes al cliente
-    while (CreditAux != null) 
+    // Métodos numeral 9: Eliminar solicitud de crédito
+    public String EliminarSolicitudCredito(String ClienteId, String CodigoCredito) 
     {
-        CreditRequest Credito = (CreditRequest) CreditAux.getData();
-        
-        if (Credito.getOwner().equals(ClienteId)) {
-            Historial += Credito.toString() + "\n"; // Agregamos la información del crédito al historial
+        Queue AuxQueue = new Queue();
+        boolean Encontrado = false;
+        // Recorremos la cola de solicitudes   
+        while (!RequestQueue.IsEmpty()) 
+        {
+            CreditRequest Solicitud = (CreditRequest) RequestQueue.DeQueue();
+            // Si coincide con el cliente y el código del crédito, no la volvemos a encolar
+            if (Solicitud.getOwner().equals(ClienteId) && Solicitud.getCode().equals(CodigoCredito)) 
+            {
+                Encontrado = true;
+            } 
+            else 
+            {
+                AuxQueue.EnQueue(Solicitud); // Guardamos las solicitudes no eliminadas en la cola temporal      
+            }
         }
-        
-        CreditAux  = CreditAux.getLink();
-    } 
-    if (Historial.isEmpty()) 
-    {
-    return "No se encontraron créditos aprobados para este cliente.";
-    } else 
-    {
-    return Historial;
+        // Restauramos la cola original
+        while (!AuxQueue.IsEmpty())
+        {
+            RequestQueue.EnQueue(AuxQueue.DeQueue());
+        }
+        if (Encontrado)
+        {
+            return "Solicitud eliminada con éxito.";
+        } 
+        else 
+        {
+            return "No se encontró la solicitud para eliminar.";
+        }
     }
 
-}
-    
-public String VerSolicitudesPendientes() {
-    String SolicitudesPendientes = "";
-    Queue AuxQueue = new Queue();
-    
-    // Recorremos la cola de solicitudes pendientes
-    while (!RequestQueue.IsEmpty()) {
-        CreditRequest Solicitud = (CreditRequest) RequestQueue.DeQueue();
-        SolicitudesPendientes += Solicitud.toString() + "\n"; // Guardamos la solicitud
-        
-        AuxQueue .EnQueue(Solicitud); // Guardamos en la cola temporal para restaurar la cola original
-    }
-    // Restauramos la cola original
-    while (!AuxQueue.IsEmpty()) {
-        RequestQueue.EnQueue(AuxQueue.DeQueue());
-    }
-    if (SolicitudesPendientes.isEmpty())
+    // Métodos numeral 10: Ver historial de créditos aprobados  
+    public String VerHistorialCreditosAprobados(String ClienteId)    
     {
-    return "No hay solicitudes pendientes de aprobación.";
-    } else 
-    {
-    return SolicitudesPendientes;
+            String Historial = "";
+            Node CreditAux = ApprovedCredits.GetFirst(); // Recorremos los créditos aprobados
+            // Buscar los créditos correspondientes al cliente
+            while (CreditAux != null) 
+            {
+                CreditRequest Credito = (CreditRequest) CreditAux.getData(); 
+                if (Credito.getOwner().equals(ClienteId)) 
+                {
+                    Historial += Credito.toString() + "\n"; // Agregamos la información del crédito al historial
+                }
+                CreditAux  = CreditAux.getLink();
+    
+            } 
+            if (Historial.isEmpty()) 
+            {
+                return "No se encontraron créditos aprobados para este cliente.";
+            } 
+            else 
+            {
+                return Historial;
+            }
     }
-}
 
+    // Métodos numeral 11: Ver solicitudes pendientes
+    public String VerSolicitudesPendientes() 
+    {
+        String SolicitudesPendientes = "";
+        Queue AuxQueue = new Queue();
+        // Recorremos la cola de solicitudes pendientes
+        while (!RequestQueue.IsEmpty()) 
+        {
+            CreditRequest Solicitud = (CreditRequest) RequestQueue.DeQueue();
+            SolicitudesPendientes += Solicitud.toString() + "\n"; // Guardamos la solicitud
+            AuxQueue .EnQueue(Solicitud); // Guardamos en la cola temporal para restaurar la cola original
+        }
+        // Restauramos la cola original
+        while (!AuxQueue.IsEmpty()) 
+        {
+            RequestQueue.EnQueue(AuxQueue.DeQueue());
+        }
+        if (SolicitudesPendientes.isEmpty())
+        {
+            return "No hay solicitudes pendientes de aprobación.";
+        } 
+        else 
+        {
+            return SolicitudesPendientes;
+        }
+    }
+
+
+    // Métodos numeral 12: Otras funciones de visualización
+    public String PrintStack(Stack Stack) 
+    {
+        Stack Aux = new Stack();
+        String text = "";
+        while (!Stack.IsEmpty()) 
+        {
+            CreditRequest CreditRequest = (CreditRequest) Stack.Pop(); 
+            text += CreditRequest.toString() + "\n";
+            Aux.Push(CreditRequest);
+        }
+        while (!Aux.IsEmpty()) Stack.Push(Aux.Pop());
+        return text;
+    }
+
+    public String PrintRejected() 
+    {
+        return PrintStack(RejectedCredits);
+    }
+
+    public boolean RejectedEmpty() {
+        return RejectedCredits.IsEmpty();
+    }
+    
+    public List CustomerListLocal() {
+        return CustomerList;
+    }
+
+    public List GetApprovedCredits() {
+        return ApprovedCredits;
+    }
+
+    public Stack GetRejectedCredits() {
+        return RejectedCredits;
+    }
+
+    public Queue RequestQueue() {
+        return RequestQueue;
+    }
 }
